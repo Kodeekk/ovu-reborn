@@ -35,12 +35,11 @@ object Ovureborn : ModInitializer {
 	private lateinit var scanKeyBinding: KeyBinding
 	private val VAULT_BLOCK = Registries.BLOCK.get(Identifier.of("minecraft", "vault")) as? VaultBlock
 	private val coroutineScope = CoroutineScope(Dispatchers.Default)
+	// Configuration
 	private var target = ""
 	private var sensitivity = 0
 	private var calibration_array = mutableListOf<String>()
-	private var calibration_currentIndex = 0
 	private var calibration_success = false
-	// Configuratiaron
 	private const val SCAN_RADIUS = 5
 	private var isScanning = false
 
@@ -142,22 +141,22 @@ object Ovureborn : ModInitializer {
 //				player.sendMessage(Text.literal("§6Found §b${vaults.size}§6 vault(s) nearby:"), true)
 				vaults.forEach { vault ->
 					val itemName = vault.displayItem?.name?.string ?: "§8No item"
-					val message = Text.literal("§7- §e${vault.position.x} ${vault.position.y} ${vault.position.z}§7: §f$itemName §7(§a${"%.1f".format(vault.distance)}m§7)")
-					player.sendMessage(message, true)
-					
+
 					if (itemName != "§8No item") {
 						if (calibration_array.size < sensitivity) { calibration_array.add(itemName) } else
 						if (calibration_array.size == sensitivity) {
 							calibration_success = calibration_array.all { it == target }
+							if (itemName == target && calibration_success) {
+								instantRightClick()
+								calibration_success = false
+								isScanning = false
+								logger.info("Clicking on $itemName when calibration gave $calibration_array")
+							}
 							calibration_array.clear()
 						}
 					}
-					logger.info("$calibration_currentIndex\t$calibration_array")
-					if (itemName == target && calibration_success) {
-						instantRightClick()
-						calibration_success = false
-						//comment AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-					}
+					val message = Text.literal("§e${vault.position.x} ${vault.position.y} ${vault.position.z}§7: §f$itemName §7(§a${"%.1f".format(vault.distance)}m§7) (calibrated - §a${calibration_array.size}§7)")
+					player.sendMessage(message, true)
 				}
 			}
 		}
