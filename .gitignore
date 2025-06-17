@@ -4,6 +4,11 @@
 build/
 out/
 classes/
+.github/
+.git/
+run/
+gradle/
+.kotlin/
 
 # eclipse
 
