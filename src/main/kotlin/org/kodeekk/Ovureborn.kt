@@ -122,6 +122,7 @@ object Ovureborn : ModInitializer {
 		ClientTickEvents.END_CLIENT_TICK.register { client ->
 			if (scanKeyBinding.wasPressed()) {
 				isScanning = !isScanning
+				calibration_array.clear()
 			}
 			if (isScanning) {
 				coroutineScope.launch {
@@ -135,9 +136,6 @@ object Ovureborn : ModInitializer {
 		val world = client.world ?: return@withContext
 		val player = client.player ?: return@withContext
 		val vaults = findVaultsInRadius(world, player.blockPos, radius)
-
-		calibration_array.clear()
-
 
 		withContext(Dispatchers.IO) {
 			if (vaults.isNotEmpty()) {
