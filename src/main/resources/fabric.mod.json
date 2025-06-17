@@ -1,0 +1,38 @@
+{
+	"schemaVersion": 1,
+	"id": "ovu-reborn",
+	"version": "${version}",
+	"name": "ovu-reborn",
+	"description": "This is an example description! Tell everyone what your mod is about!",
+	"authors": [
+		"Me!"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/ovu-reborn/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			{
+				"value": "org.kodeekk.Ovureborn",
+				"adapter": "kotlin"
+			}
+		]
+	},
+	"mixins": [
+		"ovu-reborn.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.16.14",
+		"minecraft": "~1.21.5",
+		"java": ">=21",
+		"fabric-api": "*",
+		"fabric-language-kotlin": "*"
+	},
+	"suggests": {
+		"another-mod": "*"
+	}
+}
