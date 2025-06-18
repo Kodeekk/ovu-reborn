@@ -7,22 +7,18 @@ import net.fabricmc.api.ModInitializer
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
-import net.minecraft.block.Block
 import net.minecraft.block.VaultBlock
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.option.KeyBinding
 import net.minecraft.client.util.InputUtil
 import net.minecraft.item.ItemStack
 import net.minecraft.registry.Registries
-import net.minecraft.registry.Registry
 import net.minecraft.server.command.CommandManager
 import net.minecraft.text.Text
 import net.minecraft.util.Hand
 import net.minecraft.util.Identifier
 import net.minecraft.util.hit.BlockHitResult
 import net.minecraft.util.math.BlockPos
-import net.minecraft.util.math.Box
-import net.minecraft.util.math.Vec3d
 import net.minecraft.world.World
 import org.lwjgl.glfw.GLFW
 import org.slf4j.LoggerFactory.getLogger
@@ -31,17 +27,18 @@ import kotlin.math.pow
 import kotlin.math.sqrt
 
 object Ovureborn : ModInitializer {
+	private lateinit var scan_key_binding: KeyBinding
 	private val logger = getLogger("OVU Reborn")
-	private lateinit var scanKeyBinding: KeyBinding
-	private val VAULT_BLOCK = Registries.BLOCK.get(Identifier.of("minecraft", "vault")) as? VaultBlock
-	private val coroutineScope = CoroutineScope(Dispatchers.Default)
-	// Configuration
+	private val vault_block = Registries.BLOCK.get(Identifier.of("minecraft", "vault")) as? VaultBlock
+	private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Default)
+	
 	private var target = ""
 	private var sensitivity = 0
+	private var scan_radius = 5
+	private var is_scanning = false
+
 	private var calibration_array = mutableListOf<String>()
 	private var calibration_success = false
-	private const val SCAN_RADIUS = 5
-	private var isScanning = false
 
 	override fun onInitialize() {
 		logger.info("OVU HAS ARRIVED!")
@@ -54,11 +51,20 @@ object Ovureborn : ModInitializer {
 		CommandRegistrationCallback.EVENT.register { dispatcher, registryAccess, environment ->
 			dispatcher.register(
 				CommandManager.literal("ovu")
+					.then(CommandManager.literal("radius")
+						.then(CommandManager.argument("value", IntegerArgumentType.integer(1, 100))
+							.executes { context ->
+								scan_radius = IntegerArgumentType.getInteger(context, "value")
+								context.source.player?.sendMessage(Text.literal("§aSet radius to: §e$scan_radius"))
+								1
+							}
+						)
+					)
 					.then(CommandManager.literal("target")
 						.then(CommandManager.argument("item", StringArgumentType.string())
 							.executes { context ->
 								target = StringArgumentType.getString(context, "item")
-								context.source.sendMessage(Text.literal("§aSet target item to: §e$target"))
+								context.source.player?.sendMessage(Text.literal("§aSet target item to: §e$target"))
 								1
 							}
 						)
@@ -67,7 +73,7 @@ object Ovureborn : ModInitializer {
 						.then(CommandManager.argument("value", IntegerArgumentType.integer(1, 100))
 							.executes { context ->
 								sensitivity = IntegerArgumentType.getInteger(context, "value")
-								context.source.sendMessage(Text.literal("§aSet sensitivity to: §e$sensitivity"))
+                                context.source.player?.sendMessage(Text.literal("§aSet sensitivity to: §e$sensitivity"))
 								1
 							}
 						)
@@ -94,20 +100,8 @@ object Ovureborn : ModInitializer {
 		}
 	}
 
-//	fun calibrate(newElement: String): Boolean {
-//		calibration_array[calibration_currentIndex++] = newElement
-//
-//		if (calibration_currentIndex >= sensitivity) {
-//			val allMatchTarget = calibration_array.all { it == target }
-//			calibration_array = arrayOfNulls(sensitivity)
-//			calibration_currentIndex = 0
-//			return allMatchTarget
-//		}
-//		return false
-//	}
-
 	private fun registerKeyBindings() {
-		scanKeyBinding = KeyBindingHelper.registerKeyBinding(
+		scan_key_binding = KeyBindingHelper.registerKeyBinding(
 			KeyBinding(
 				"key.ovureborn.scan_vaults",
 				InputUtil.Type.KEYSYM,
@@ -119,13 +113,13 @@ object Ovureborn : ModInitializer {
 
 	private fun registerTickHandler() {
 		ClientTickEvents.END_CLIENT_TICK.register { client ->
-			if (scanKeyBinding.wasPressed()) {
-				isScanning = !isScanning
+			if (scan_key_binding.wasPressed()) {
+				is_scanning = !is_scanning
 				calibration_array.clear()
 			}
-			if (isScanning) {
+			if (is_scanning) {
 				coroutineScope.launch {
-					scanNearbyVaults(client, SCAN_RADIUS)
+					scanNearbyVaults(client, scan_radius)
 				}
 			}
 		}
@@ -143,13 +137,14 @@ object Ovureborn : ModInitializer {
 					val itemName = vault.displayItem?.name?.string ?: "§8No item"
 
 					if (itemName != "§8No item") {
+						logger.info("calibration array: $calibration_array")
 						if (calibration_array.size < sensitivity) { calibration_array.add(itemName) } else
 						if (calibration_array.size == sensitivity) {
 							calibration_success = calibration_array.all { it == target }
 							if (itemName == target && calibration_success) {
 								instantRightClick()
 								calibration_success = false
-								isScanning = false
+								is_scanning = false
 								logger.info("Clicking on $itemName when calibration gave $calibration_array")
 							}
 							calibration_array.clear()
@@ -162,36 +157,37 @@ object Ovureborn : ModInitializer {
 		}
 	}
 
-	private suspend fun findVaultsInRadius(world: World, center: BlockPos, radius: Int): List<VaultInfo> = coroutineScope {
-		val vaults = mutableListOf<VaultInfo>()
-		val minX = center.x - radius
-		val minY = center.y - radius
-		val minZ = center.z - radius
-		val maxX = center.x + radius
-		val maxY = center.y + radius
-		val maxZ = center.z + radius
+	private suspend fun findVaultsInRadius(world: World, center: BlockPos, radius: Int): List<VaultInfo> =
+        coroutineScope {
+            val vaults = mutableListOf<VaultInfo>()
+            val minX = center.x - radius
+            val minY = center.y - radius
+            val minZ = center.z - radius
+            val maxX = center.x + radius
+            val maxY = center.y + radius
+            val maxZ = center.z + radius
 
-		(minY..maxY).map { y ->
-			async {
-				for (x in minX..maxX) {
-					for (z in minZ..maxZ) {
-						val pos = BlockPos(x, y, z)
-						val state = world.getBlockState(pos)
+            (minY..maxY).map { y ->
+                async {
+                    for (x in minX..maxX) {
+                        for (z in minZ..maxZ) {
+                            val pos = BlockPos(x, y, z)
+                            val state = world.getBlockState(pos)
 
-						if (state.block == VAULT_BLOCK) {
-							val displayItem = getVaultDisplayItem(world, pos)
-							val distance = getDistance(center, pos)
-							synchronized(vaults) {
-								vaults.add(VaultInfo(pos, displayItem, distance))
-							}
-						}
-					}
-				}
-			}
-		}.awaitAll()
+                            if (state.block == vault_block) {
+                                val displayItem = getVaultDisplayItem(world, pos)
+                                val distance = getDistance(center, pos)
+                                synchronized(vaults) {
+                                    vaults.add(VaultInfo(pos, displayItem, distance))
+                                }
+                            }
+                        }
+                    }
+                }
+            }.awaitAll()
 
-		vaults.sortedBy { it.distance }
-	}
+            vaults.sortedBy { it.distance }
+        }
 
 	private fun getVaultDisplayItem(world: World, pos: BlockPos): ItemStack? {
 		return try {
