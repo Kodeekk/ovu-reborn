@@ -2,18 +2,25 @@ package org.kodeekk
 
 import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.mojang.brigadier.arguments.StringArgumentType
+import com.mojang.brigadier.context.CommandContext
+import com.mojang.brigadier.suggestion.SuggestionProvider
+import com.mojang.brigadier.suggestion.SuggestionsBuilder
 import kotlinx.coroutines.*
 import net.fabricmc.api.ModInitializer
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
 import net.minecraft.block.VaultBlock
+import net.minecraft.block.entity.VaultBlockEntity
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.option.KeyBinding
 import net.minecraft.client.util.InputUtil
 import net.minecraft.item.ItemStack
 import net.minecraft.registry.Registries
 import net.minecraft.server.command.CommandManager
+import net.minecraft.server.command.ServerCommandSource
+import net.minecraft.server.network.ServerPlayerEntity
+import net.minecraft.state.property.Properties
 import net.minecraft.text.Text
 import net.minecraft.util.Hand
 import net.minecraft.util.Identifier
@@ -26,19 +33,80 @@ import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.sqrt
 
+
 object Ovureborn : ModInitializer {
 	private lateinit var scan_key_binding: KeyBinding
 	private val logger = getLogger("OVU Reborn")
 	private val vault_block = Registries.BLOCK.get(Identifier.of("minecraft", "vault")) as? VaultBlock
 	private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Default)
-	
-	private var target = ""
-	private var sensitivity = 0
-	private var scan_radius = 5
+
+	private var past = mutableListOf<String>()
+	private var target = "Heavy Core"
+	private var sensitivity = 1
+	private var scan_radius = 1
+
+	private var is_target_ominous = true
 	private var is_scanning = false
 
 	private var calibration_array = mutableListOf<String>()
 	private var calibration_success = false
+
+	var OminousVaultSuggestionProvider: SuggestionProvider<ServerCommandSource?> =
+		SuggestionProvider { context: CommandContext<ServerCommandSource?>?, builder: SuggestionsBuilder? ->
+			val suggestions: List<String> = listOf(
+				"Emerald",
+				"Wind Charge",
+				"Diamond",
+				"Enchanted Golden Apple",
+				"Flow Banner Pattern",
+				"Ominous Bottle",
+				"Block of Emerald",
+				"Crossbow",
+				"Block of Iron",
+				"Golden Apple",
+				"Diamond Axe",
+				"Diamond Chestplate",
+				"Music Disc",
+				"Heavy Core",
+				"Enchanted Book",
+				"Block of Diamond",
+			)
+			for (entry in suggestions) {
+				builder!!.suggest(entry)
+			}
+			builder!!.buildFuture()
+		}
+	var VaultSuggestionProvider: SuggestionProvider<ServerCommandSource?> =
+		SuggestionProvider { context: CommandContext<ServerCommandSource?>?, builder: SuggestionsBuilder? ->
+			val suggestions: List<String> = listOf(
+				"Emerald",
+				"Arrow",
+				"Arrow of Poison",
+				"Iron Ingot",
+				"Wind Charge",
+				"Honey Bottle",
+				"Ominous Bottle",
+				"Shield",
+				"Bow",
+				"Diamond",
+				"Golden Apple",
+				"Golden Carrot",
+				"Enchanted Book",
+				"Crossbow",
+				"Iron Axe",
+				"Iron Chestplate",
+				"Bolt Armor Trim Smithing Template",
+				"Music Disc",
+				"Guster Banner Pattern",
+				"Diamond Axe",
+				"Diamond Chestplate",
+				"Trident",
+			)
+			for (entry in suggestions) {
+				builder!!.suggest(entry)
+			}
+			builder!!.buildFuture()
+		}
 
 	override fun onInitialize() {
 		logger.info("OVU HAS ARRIVED!")
@@ -55,28 +123,56 @@ object Ovureborn : ModInitializer {
 						.then(CommandManager.argument("value", IntegerArgumentType.integer(1, 100))
 							.executes { context ->
 								scan_radius = IntegerArgumentType.getInteger(context, "value")
-								context.source.player?.sendMessage(Text.literal("§aSet radius to: §e$scan_radius"))
+								context.source.player?.sendMessage(Text.literal("§aSet radius to: §e$scan_radius"), true)
 								1
 							}
 						)
 					)
 					.then(CommandManager.literal("target")
-						.then(CommandManager.argument("item", StringArgumentType.string())
-							.executes { context ->
-								target = StringArgumentType.getString(context, "item")
-								context.source.player?.sendMessage(Text.literal("§aSet target item to: §e$target"))
-								1
-							}
+						.then(CommandManager.literal("regular")
+							.then(CommandManager.argument("item", StringArgumentType.string())
+								.suggests(VaultSuggestionProvider)
+								.executes { context ->
+									target = StringArgumentType.getString(context, "item")
+									is_target_ominous = false
+									context.source.player?.sendMessage(Text.literal("§aSet target item to: §e$target"), true)
+									1
+								}
+							)
+						)
+						.then(CommandManager.literal("ominous")
+							.then(CommandManager.argument("item", StringArgumentType.string())
+								.suggests(OminousVaultSuggestionProvider)
+								.executes { context ->
+									target = StringArgumentType.getString(context, "item")
+									is_target_ominous = true
+									context.source.player?.sendMessage(Text.literal("§aSet target item to: §e$target"), true)
+									1
+								}
+							)
 						)
 					)
 					.then(CommandManager.literal("sensitivity")
 						.then(CommandManager.argument("value", IntegerArgumentType.integer(1, 100))
 							.executes { context ->
 								sensitivity = IntegerArgumentType.getInteger(context, "value")
-                                context.source.player?.sendMessage(Text.literal("§aSet sensitivity to: §e$sensitivity"))
+                                context.source.player?.sendMessage(Text.literal("§aSet sensitivity to: §e$sensitivity"), true)
 								1
 							}
 						)
+					)
+					.then(CommandManager.literal("checkout")
+						.executes { context ->
+							context.source.player?.sendMessage(Text.literal("§aSummarizing:§e"))
+							context.source.player?.sendMessage(Text.literal("§a\tTarget:§e $target"))
+							context.source.player?.sendMessage(Text.literal("§a\tSensitivity:§e $sensitivity"))
+							context.source.player?.sendMessage(Text.literal("§a\tScan Radius:§e $scan_radius"))
+							context.source.player?.sendMessage(Text.literal("§a\tIs Target Ominous:§e $is_target_ominous"))
+							context.source.player?.sendMessage(Text.literal("§a\tIs Scanning:§e $is_scanning"))
+							context.source.player?.sendMessage(Text.literal("§a\tCalibration Array:§e $calibration_array"))
+							context.source.player?.sendMessage(Text.literal("§a\tPast Items:§e $past"))
+							1
+						}
 					)
 			)
 		}
@@ -129,25 +225,31 @@ object Ovureborn : ModInitializer {
 		val world = client.world ?: return@withContext
 		val player = client.player ?: return@withContext
 		val vaults = findVaultsInRadius(world, player.blockPos, radius)
-
+		var past = mutableListOf<String>()
 		withContext(Dispatchers.IO) {
 			if (vaults.isNotEmpty()) {
 //				player.sendMessage(Text.literal("§6Found §b${vaults.size}§6 vault(s) nearby:"), true)
 				vaults.forEach { vault ->
-					val itemName = vault.displayItem?.name?.string ?: "§8No item"
+					var itemName: String = ""
+					if (
+                        (vault.isOminous && is_target_ominous) || (!vault.isOminous && !is_target_ominous)
+					) {
+						itemName = vault.displayItem?.name?.string ?: "§8No item"
 
-					if (itemName != "§8No item") {
-						logger.info("calibration array: $calibration_array")
-						if (calibration_array.size < sensitivity) { calibration_array.add(itemName) } else
-						if (calibration_array.size == sensitivity) {
-							calibration_success = calibration_array.all { it == target }
-							if (itemName == target && calibration_success) {
-								instantRightClick()
-								calibration_success = false
-								is_scanning = false
-								logger.info("Clicking on $itemName when calibration gave $calibration_array")
-							}
-							calibration_array.clear()
+						if (itemName != "§8No item") {
+//						logger.info("calibration array: $calibration_array")
+							if ( !past.contains(itemName) ) past.add(itemName)
+							if (calibration_array.size < sensitivity) { calibration_array.add(itemName) } else
+								if (calibration_array.size == sensitivity) {
+									calibration_success = calibration_array.all { it == target }
+									if (itemName == target && calibration_success) {
+//										instantRightClick()
+										calibration_success = false
+//										is_scanning = false
+										logger.info("Clicking on $itemName when calibration gave $calibration_array")
+									}
+									calibration_array.clear()
+								}
 						}
 					}
 					val message = Text.literal("§e${vault.position.x} ${vault.position.y} ${vault.position.z}§7: §f$itemName §7(§a${"%.1f".format(vault.distance)}m§7) (calibrated - §a${calibration_array.size}§7)")
@@ -173,12 +275,15 @@ object Ovureborn : ModInitializer {
                         for (z in minZ..maxZ) {
                             val pos = BlockPos(x, y, z)
                             val state = world.getBlockState(pos)
+							val block = state.block
 
-                            if (state.block == vault_block) {
+							if (block == vault_block) {
                                 val displayItem = getVaultDisplayItem(world, pos)
                                 val distance = getDistance(center, pos)
+								val isOminous = state.get(VaultBlock.OMINOUS)
+
                                 synchronized(vaults) {
-                                    vaults.add(VaultInfo(pos, displayItem, distance))
+                                    vaults.add(VaultInfo(pos, displayItem, distance, isOminous))
                                 }
                             }
                         }
@@ -216,6 +321,7 @@ object Ovureborn : ModInitializer {
 	private data class VaultInfo(
 		val position: BlockPos,
 		val displayItem: ItemStack?,
-		val distance: Double
+		val distance: Double,
+		val isOminous: Boolean
 	)
 }
