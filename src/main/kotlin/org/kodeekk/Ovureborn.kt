@@ -224,10 +224,9 @@ object Ovureborn : ModInitializer {
 		val world = client.world ?: return@withContext
 		val player = client.player ?: return@withContext
 		val vaults = findVaultsInRadius(world, player.blockPos, radius)
-		var past = mutableListOf<String>()
 		withContext(Dispatchers.IO) {
 			if (vaults.isNotEmpty()) {
-//				player.sendMessage(Text.literal("§6Found §b${vaults.size}§6 vault(s) nearby:"), true)
+				// player.sendMessage(Text.literal("§6Found §b${vaults.size}§6 vault(s) nearby:"), true)
 				vaults.forEach { vault ->
 					var itemName: String = ""
 					if (
@@ -236,16 +235,14 @@ object Ovureborn : ModInitializer {
 						itemName = vault.displayItem?.name?.string ?: "§8No item"
 
 						if (itemName != "§8No item") {
-//						logger.info("calibration array: $calibration_array")
 							if ( !past.contains(itemName) ) past.add(itemName)
 							if (calibration_array.size < sensitivity) { calibration_array.add(itemName) } else
 								if (calibration_array.size == sensitivity) {
 									calibration_success = calibration_array.all { it == target }
 									if (itemName == target && calibration_success) {
-//										instantRightClick()
+										instantRightClick()
 										calibration_success = false
-//										is_scanning = false
-										logger.info("Clicking on $itemName when calibration gave $calibration_array")
+										is_scanning = false
 									}
 									calibration_array.clear()
 								}
