@@ -2,14 +2,14 @@
 	"schemaVersion": 1,
 	"id": "ovu-reborn",
 	"version": "${version}",
-	"name": "ovu-reborn",
-	"description": "This is an example description! Tell everyone what your mod is about!",
+	"name": "OVU Reborn",
+	"description": "Ominous Vault Utility, is a assistant minecraft mod that helps you get the exact item you want from vault blocks (1.21+)",
 	"authors": [
-		"Me!"
+		"Kodeekk"
 	],
 	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"homepage": "https://github.com/Kodeekk",
+		"sources": "https://github.com/Kodeekk/ovu-reborn"
 	},
 	"license": "CC0-1.0",
 	"icon": "assets/ovu-reborn/icon.png",
@@ -28,8 +28,5 @@
 		"java": ">=21",
 		"fabric-api": "*",
 		"fabric-language-kotlin": "*"
-	},
-	"suggests": {
-		"another-mod": "*"
 	}
 }

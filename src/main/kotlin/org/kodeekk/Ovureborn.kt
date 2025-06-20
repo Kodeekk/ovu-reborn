@@ -114,7 +114,6 @@ object Ovureborn : ModInitializer {
 		registerKeyBindings()
 		registerTickHandler()
 	}
-
 	fun registerCommand() {
 		CommandRegistrationCallback.EVENT.register { dispatcher, registryAccess, environment ->
 			dispatcher.register(
